@@ -605,14 +605,27 @@ function renderDetailView(comp, data) {
             Скриншоты
             <span class="ml-2 text-sm font-normal text-slate-400">${screenshotCount}</span>
           </h2>
-          <button onclick="enableCaptionMode('${esc(comp.id)}')"
-                  class="focus-ring flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded px-2.5 py-1.5 bg-white hover:bg-slate-50 transition-colors">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
-            </svg>
-            Подписать
-          </button>
+          <div class="flex items-center gap-2">
+            <button onclick="enableCaptionMode('${esc(comp.id)}')"
+                    class="focus-ring flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded px-2.5 py-1.5 bg-white hover:bg-slate-50 transition-colors">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+              </svg>
+              Подписать
+            </button>
+            <button onclick="downloadCaptions()"
+                    title="Скачать captions.json для записи в репозиторий"
+                    class="focus-ring flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded px-2.5 py-1.5 bg-white hover:bg-slate-50 transition-colors">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Сохранить подписи
+            </button>
+          </div>
         </div>
         <div class="screenshot-grid">
           ${comp.screenshots.map((s) => {
@@ -1147,6 +1160,36 @@ document.addEventListener('mousemove', e => {
 });
 
 // ─── SCREENSHOT PERSISTENCE (localStorage) ────────────────────────────────────
+
+/**
+ * Download all captions from localStorage as captions.json.
+ * Put the file in _parse/ and run apply_captions.py to write them into competitors.json.
+ */
+function downloadCaptions() {
+  const all = {};
+  const competitors = getData().competitors || [];
+  for (const comp of competitors) {
+    try {
+      const stored = localStorage.getItem(`ls_caps_${comp.id}`);
+      if (!stored) continue;
+      const caps = JSON.parse(stored);
+      if (Object.keys(caps).length > 0) all[comp.id] = caps;
+    } catch(e) {}
+  }
+  if (Object.keys(all).length === 0) {
+    showToast('Нет сохранённых подписей');
+    return;
+  }
+  const total = Object.values(all).reduce((n, c) => n + Object.keys(c).length, 0);
+  const blob = new Blob([JSON.stringify(all, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'captions.json';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showToast(`Скачано: ${total} подписей для ${Object.keys(all).length} конкурентов`);
+}
 
 function saveCaption(compId, file, text) {
   if (!compId || !file) return;
