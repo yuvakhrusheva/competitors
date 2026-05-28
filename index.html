@@ -42,7 +42,7 @@
     .screenshot-card:hover { border-color: #475569; }
     .screenshot-img { aspect-ratio: 16 / 9; object-fit: cover; width: 100%; background: #f1f5f9; }
 
-    /* Screenshot delete button */
+    /* Screenshot delete button + drag handle */
     .screenshot-cap-card { position: relative; }
     .screenshot-delete-btn {
       position: absolute; top: 6px; right: 6px; z-index: 3;
@@ -54,6 +54,20 @@
     }
     .screenshot-cap-card:hover .screenshot-delete-btn { opacity: 1; }
     .screenshot-delete-btn:hover { background: #fef2f2 !important; border-color: #fca5a5 !important; color: #ef4444 !important; }
+
+    /* Drag handle */
+    .screen-drag-handle {
+      position: absolute; top: 6px; left: 6px; z-index: 3;
+      opacity: 0; transition: opacity 0.15s;
+      width: 22px; height: 22px; border-radius: 3px;
+      background: white; border: 1px solid #e2e8f0;
+      display: flex; align-items: center; justify-content: center;
+      color: #94a3b8; cursor: grab; user-select: none;
+    }
+    .screenshot-cap-card:hover .screen-drag-handle { opacity: 1; }
+    .screen-drag-handle:active { cursor: grabbing; }
+    .screenshot-cap-card.dragging { opacity: 0.35; }
+    .screenshot-cap-card.drag-over { outline: 2px solid #3b82f6; outline-offset: 2px; }
 
     /* Editable panel items (strengths / weaknesses) */
     .panel-item-edit {
@@ -601,17 +615,30 @@ function renderDetailView(comp, data) {
           </button>
         </div>
         <div class="screenshot-grid">
-          ${comp.screenshots.map((s, sIdx) => {
+          ${comp.screenshots.map((s) => {
             const tagsJson = JSON.stringify(s.tags || []).replace(/"/g, '&quot;');
             const needsCaption = !s.caption || s.caption.startsWith('[TODO]');
             return `
               <figure class="screenshot-cap-card screenshot-card rounded-lg border ${needsCaption ? 'border-amber-200 bg-amber-50/30' : 'border-slate-200 bg-white'} overflow-hidden cursor-pointer"
                       data-file="${esc(s.file)}"
                       data-tags="${tagsJson}"
-                      onclick="if(!_captionModeActive)openLightbox(${sIdx})"
+                      draggable="true"
+                      ondragstart="screenDragStart(event,this)"
+                      ondragover="screenDragOver(event,this)"
+                      ondrop="screenDrop(event,this)"
+                      ondragend="screenDragEnd(event,this)"
+                      ondragleave="this.classList.remove('drag-over')"
+                      onclick="if(!_captionModeActive)openLightboxByFile(this.dataset.file)"
                       tabindex="0"
-                      onkeydown="if(event.key==='Enter'&&!_captionModeActive)openLightbox(${sIdx})"
+                      onkeydown="if(event.key==='Enter'&&!_captionModeActive)openLightboxByFile(this.dataset.file)"
                       role="button" aria-label="${esc(s.caption || 'Скриншот')}">
+                <div class="screen-drag-handle" title="Перетащи для изменения порядка">
+                  <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden="true">
+                    <circle cx="3" cy="2" r="1.2"/><circle cx="7" cy="2" r="1.2"/>
+                    <circle cx="3" cy="7" r="1.2"/><circle cx="7" cy="7" r="1.2"/>
+                    <circle cx="3" cy="12" r="1.2"/><circle cx="7" cy="12" r="1.2"/>
+                  </svg>
+                </div>
                 <button class="screenshot-delete-btn"
                         onclick="deleteScreenshot(event,'${esc(s.file)}')"
                         title="Удалить скриншот" aria-label="Удалить">×</button>
@@ -1023,8 +1050,19 @@ function enableCaptionMode(compId) {
 
 function exitCaptionMode() {
   _captionModeActive = false;
-  document.querySelectorAll('.caption-text').forEach(el => {
-    el.contentEditable = 'false';
+  const compId = window._lbData?.compId;
+  // Save every grid caption to localStorage
+  document.querySelectorAll('.screenshot-cap-card').forEach(card => {
+    const captionEl = card.querySelector('.caption-text');
+    const file = card.dataset.file;
+    if (captionEl && file) {
+      const text = captionEl.innerText.trim();
+      saveCaption(compId, file, text);
+      // Also update in-memory _lbData
+      const s = window._lbData?.screenshots?.find(x => x.file === file);
+      if (s) s.caption = text || '[TODO] Подпиши этот скриншот';
+    }
+    card.querySelector('.caption-text').contentEditable = 'false';
   });
   document.getElementById('caption-bar').classList.remove('visible');
   document.body.style.paddingBottom = '';
@@ -1108,6 +1146,110 @@ document.addEventListener('mousemove', e => {
   if (tt.classList.contains('visible')) positionTooltip(e, tt);
 });
 
+// ─── SCREENSHOT PERSISTENCE (localStorage) ────────────────────────────────────
+
+function saveCaption(compId, file, text) {
+  if (!compId || !file) return;
+  try {
+    const key = `ls_caps_${compId}`;
+    const caps = JSON.parse(localStorage.getItem(key) || '{}');
+    if (!text || text.startsWith('[TODO]')) {
+      delete caps[file];
+    } else {
+      caps[file] = text;
+    }
+    localStorage.setItem(key, JSON.stringify(caps));
+  } catch(e) {}
+}
+
+function saveScreenOrder(compId, files) {
+  if (!compId || !files) return;
+  try {
+    localStorage.setItem(`ls_order_${compId}`, JSON.stringify(files));
+  } catch(e) {}
+}
+
+/**
+ * Returns a new screenshots array with stored captions applied and stored order applied.
+ * New screenshots (not in stored order) are appended at the end.
+ */
+function loadStoredScreenshotData(compId, screenshots) {
+  try {
+    // Apply stored captions
+    const caps = JSON.parse(localStorage.getItem(`ls_caps_${compId}`) || '{}');
+    screenshots = screenshots.map(s => {
+      const stored = caps[s.file];
+      return stored ? { ...s, caption: stored } : s;
+    });
+    // Apply stored order
+    const orderRaw = localStorage.getItem(`ls_order_${compId}`);
+    if (orderRaw) {
+      const order = JSON.parse(orderRaw);
+      const fileMap = Object.fromEntries(screenshots.map(s => [s.file, s]));
+      const ordered = order.map(f => fileMap[f]).filter(Boolean);
+      const inOrder = new Set(order);
+      const added = screenshots.filter(s => !inOrder.has(s.file));
+      screenshots = [...ordered, ...added];
+    }
+  } catch(e) {}
+  return screenshots;
+}
+
+// ─── SCREENSHOT: open by file path (survives drag reorder) ────────────────────
+function openLightboxByFile(file) {
+  const idx = (window._lbData?.screenshots || []).findIndex(s => s.file === file);
+  if (idx >= 0) openLightbox(idx);
+}
+
+// ─── SCREENSHOT: drag & drop reordering ───────────────────────────────────────
+let _dragSrcCard = null;
+
+function screenDragStart(e, card) {
+  _dragSrcCard = card;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', card.dataset.file);
+  // Delay so the ghost image captures the non-dimmed state
+  setTimeout(() => card.classList.add('dragging'), 0);
+}
+
+function screenDragOver(e, card) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  if (_dragSrcCard && _dragSrcCard !== card) {
+    card.classList.add('drag-over');
+  }
+}
+
+function screenDrop(e, card) {
+  e.preventDefault();
+  if (!_dragSrcCard || _dragSrcCard === card) return;
+  card.classList.remove('drag-over');
+  const grid = card.closest('.screenshot-grid');
+  const before = [...grid.querySelectorAll('.screenshot-cap-card')];
+  const srcIdx = before.indexOf(_dragSrcCard);
+  const tgtIdx = before.indexOf(card);
+  if (srcIdx < tgtIdx) {
+    grid.insertBefore(_dragSrcCard, card.nextSibling);
+  } else {
+    grid.insertBefore(_dragSrcCard, card);
+  }
+  // Rebuild _lbData to match new DOM order
+  const newFiles = [...grid.querySelectorAll('.screenshot-cap-card')].map(c => c.dataset.file);
+  if (window._lbData) {
+    const fileMap = Object.fromEntries(window._lbData.screenshots.map(s => [s.file, s]));
+    window._lbData.screenshots = newFiles.map(f => fileMap[f]).filter(Boolean);
+  }
+  saveScreenOrder(window._lbData?.compId, newFiles);
+  showToast('Порядок сохранён');
+}
+
+function screenDragEnd(e, card) {
+  card.classList.remove('dragging');
+  document.querySelectorAll('.screenshot-cap-card')
+    .forEach(c => c.classList.remove('drag-over'));
+  _dragSrcCard = null;
+}
+
 // ─── LIGHTBOX ─────────────────────────────────────────────────────────────────
 // window._lbData is injected by a <script> tag in the screenshots section on each render
 let _lbIdx = 0;
@@ -1185,7 +1327,7 @@ function deleteScreenshot(event, fileAttr) {
   if (countEl) countEl.textContent = remaining || '';
 }
 
-// Sync caption edited in lightbox back to the grid card + _lbData
+// Sync caption edited in lightbox back to the grid card + _lbData + localStorage
 function lbSyncCaption() {
   const data = window._lbData;
   if (!data) return;
@@ -1194,6 +1336,8 @@ function lbSyncCaption() {
   const text = document.getElementById('lb-caption').innerText.trim();
   // Update in-memory screenshot entry
   s.caption = text || '[TODO] Подпиши этот скриншот';
+  // Persist to localStorage
+  saveCaption(data.compId, s.file, text);
   // Sync to grid card (if visible in DOM)
   const card = document.querySelector(`.screenshot-cap-card[data-file="${CSS.escape(s.file)}"]`);
   if (!card) return;
@@ -1241,8 +1385,11 @@ function render() {
   } else if (route.view === 'detail') {
     const comp = data.competitors.find(c => c.id === route.id);
     if (comp) {
-      app.innerHTML = renderDetailView(comp, data);
-      window._lbData = { compName: comp.name, compId: comp.id, screenshots: comp.screenshots || [] };
+      // Apply stored captions + order from localStorage before rendering
+      const screens = loadStoredScreenshotData(comp.id, [...(comp.screenshots || [])]);
+      const compView = { ...comp, screenshots: screens };
+      app.innerHTML = renderDetailView(compView, data);
+      window._lbData = { compName: comp.name, compId: comp.id, screenshots: screens };
     } else {
       app.innerHTML = `
         <div class="max-w-5xl mx-auto px-6 py-16 text-center text-slate-400">
