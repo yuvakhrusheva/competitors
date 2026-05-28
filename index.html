@@ -1,0 +1,1291 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Анализ конкурентов · AI Math AZ</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; }
+    .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+    /* Lightbox */
+    #lightbox { display: none; }
+    #lightbox.open { display: flex; }
+
+    /* Focus ring for accessibility */
+    .focus-ring:focus { outline: 2px solid #475569; outline-offset: 2px; }
+    .focus-ring:focus:not(:focus-visible) { outline: none; }
+
+    /* Feature table */
+    .feature-table td { vertical-align: top; }
+
+    /* Tooltip */
+    #tooltip { display: none; position: fixed; z-index: 50; pointer-events: none; }
+    #tooltip.visible { display: block; }
+
+    /* Notes prose - wrap long URLs */
+    .notes-text { word-break: break-word; hyphens: auto; }
+
+    /* Sticky filter bar */
+    .sticky-bar { position: sticky; top: 57px; z-index: 10; }
+
+    /* Card hover */
+    .competitor-card { transition: border-color 150ms; }
+    .competitor-card:hover { border-color: #475569; }
+    .competitor-card:focus { outline: 2px solid #475569; outline-offset: 2px; }
+
+    /* Screenshot grid */
+    .screenshot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+    .screenshot-card { transition: border-color 150ms; }
+    .screenshot-card:hover { border-color: #475569; }
+    .screenshot-img { aspect-ratio: 16 / 9; object-fit: cover; width: 100%; background: #f1f5f9; }
+
+    /* Screenshot delete button */
+    .screenshot-cap-card { position: relative; }
+    .screenshot-delete-btn {
+      position: absolute; top: 6px; right: 6px; z-index: 3;
+      opacity: 0; transition: opacity 0.15s;
+      width: 24px; height: 24px; border-radius: 50%;
+      background: white; border: 1px solid #e2e8f0;
+      display: flex; align-items: center; justify-content: center;
+      color: #94a3b8; font-size: 16px; line-height: 1; cursor: pointer;
+    }
+    .screenshot-cap-card:hover .screenshot-delete-btn { opacity: 1; }
+    .screenshot-delete-btn:hover { background: #fef2f2 !important; border-color: #fca5a5 !important; color: #ef4444 !important; }
+
+    /* Editable panel items (strengths / weaknesses) */
+    .panel-item-edit {
+      outline: none; cursor: text; border-radius: 3px;
+      padding: 1px 3px; margin: -1px -3px;
+      transition: background 0.15s, box-shadow 0.15s;
+    }
+    .panel-item-edit:hover { background: rgba(0,0,0,0.04); }
+    .panel-item-edit:focus { background: #fefce8; box-shadow: 0 0 0 2px #fbbf24; }
+
+    /* Caption edit mode (grid cards) */
+    .caption-text[contenteditable="true"] {
+      outline: none; border-radius: 3px;
+      padding: 2px 4px; margin: -2px -4px;
+      background: #fefce8; box-shadow: 0 0 0 2px #fbbf24;
+      cursor: text; display: block; min-height: 1.4em;
+    }
+
+    /* Lightbox caption — always editable */
+    .lb-caption-edit {
+      cursor: text; border-radius: 4px;
+      padding: 3px 6px; margin: -3px -6px;
+      min-height: 1.4em; outline: none;
+      transition: background 0.15s, box-shadow 0.15s;
+    }
+    .lb-caption-edit:hover { background: #f8fafc; }
+    .lb-caption-edit:focus { background: #fefce8; box-shadow: 0 0 0 2px #fbbf24; }
+    .lb-caption-edit:empty::before {
+      content: attr(data-placeholder);
+      color: #94a3b8; font-style: italic; font-weight: 400;
+      pointer-events: none;
+    }
+    /* Caption bar + Toast */
+    #caption-bar { display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 30; }
+    #caption-bar.visible { display: flex; }
+    #toast { display: none; position: fixed; bottom: 4.5rem; left: 50%; transform: translateX(-50%); z-index: 60; white-space: nowrap; }
+    #toast.visible { display: flex; }
+
+    /* Scrollable feature table on small widths */
+    .feature-table-wrap { overflow-x: auto; }
+
+    /* Sticky feature matrix */
+    .matrix-wrap { overflow: auto; }
+    .matrix-table { border-collapse: separate; border-spacing: 0; }
+    .matrix-corner { position: sticky; top: 0; left: 0; z-index: 4; background: white; }
+    .matrix-col-header { position: sticky; top: 0; z-index: 2; background: white; }
+    .matrix-row-header { position: sticky; left: 0; z-index: 1; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+
+<!-- ─── NAVIGATION ──────────────────────────────────────────────────────────── -->
+<header class="bg-white border-b border-slate-200 sticky top-0 z-20">
+  <div class="max-w-screen-2xl mx-auto px-6 flex items-center gap-0 h-14">
+    <!-- Logo -->
+    <span class="text-sm font-semibold text-slate-500 mr-6 whitespace-nowrap">AI Math AZ</span>
+
+    <!-- Tabs -->
+    <nav class="flex items-stretch h-full" aria-label="Основная навигация">
+      <button id="nav-cards"    onclick="navigate('#/cards')"    class="focus-ring nav-tab px-4 text-sm border-b-2 transition-colors">
+        По конкурентам
+      </button>
+      <button id="nav-features" onclick="navigate('#/features')" class="focus-ring nav-tab px-4 text-sm border-b-2 transition-colors">
+        По фичам
+      </button>
+    </nav>
+
+    <!-- Right: metadata -->
+    <div class="ml-auto flex items-center gap-3 text-xs text-slate-400">
+      <span id="meta-count"></span>
+      <span id="meta-updated"></span>
+    </div>
+  </div>
+</header>
+
+<!-- ─── MAIN CONTENT ────────────────────────────────────────────────────────── -->
+<main id="app" class="max-w-screen-2xl mx-auto"></main>
+
+<!-- ─── LIGHTBOX ────────────────────────────────────────────────────────────── -->
+<div id="lightbox" class="fixed inset-0 bg-slate-900/80 z-50 items-center justify-center p-6"
+     onclick="closeLightbox(this, event)" role="dialog" aria-modal="true" aria-label="Скриншот">
+
+  <!-- Prev arrow -->
+  <button id="lb-prev"
+          onclick="lbNavigate(-1)"
+          class="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-slate-700
+                 rounded-full w-11 h-11 flex items-center justify-center shadow-lg focus-ring
+                 transition z-10" aria-label="Предыдущий">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="15 18 9 12 15 6"/>
+    </svg>
+  </button>
+
+  <div class="relative max-w-5xl w-full bg-white rounded-lg overflow-hidden" onclick="event.stopPropagation()">
+    <div class="p-4 border-b border-slate-100 flex items-start justify-between gap-4">
+      <div class="flex-1 min-w-0">
+        <p id="lb-comp" class="text-xs text-slate-400 font-medium uppercase tracking-wide mb-1"></p>
+        <p id="lb-caption"
+           class="lb-caption-edit text-sm text-slate-800 font-semibold leading-snug"
+           contenteditable="true"
+           data-placeholder="Добавь подпись…"
+           oninput="lbSyncCaption()"
+           onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"></p>
+        <div id="lb-tags" class="flex flex-wrap gap-1 mt-2"></div>
+      </div>
+      <div class="flex items-center gap-3 flex-shrink-0">
+        <span id="lb-counter" class="text-xs text-slate-400 tabular-nums"></span>
+        <a id="lb-link" href="#" class="text-xs text-slate-500 hover:text-slate-800 underline">
+          Карточка конкурента →
+        </a>
+        <button onclick="closeLightboxBtn()"
+                class="focus-ring text-slate-400 hover:text-slate-700 p-1" aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="bg-slate-50 flex items-center justify-center p-4 max-h-[72vh]">
+      <img id="lb-img" src="" alt="" class="max-w-full max-h-full object-contain rounded">
+    </div>
+  </div>
+
+  <!-- Next arrow -->
+  <button id="lb-next"
+          onclick="lbNavigate(1)"
+          class="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-slate-700
+                 rounded-full w-11 h-11 flex items-center justify-center shadow-lg focus-ring
+                 transition z-10" aria-label="Следующий">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="9 18 15 12 9 6"/>
+    </svg>
+  </button>
+
+</div>
+
+<!-- ─── TOOLTIP ─────────────────────────────────────────────────────────────── -->
+<div id="tooltip"
+     class="bg-slate-800 text-white text-xs rounded px-2.5 py-2 max-w-xs leading-snug shadow-lg"
+     role="tooltip"></div>
+
+<!-- ─── CAPTION MODE BAR ────────────────────────────────────────────────────── -->
+<div id="caption-bar"
+     class="bg-amber-50 border-t border-amber-200 px-6 py-3 items-center justify-between gap-4 shadow-lg">
+  <div class="flex items-center gap-2 text-sm text-amber-800">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+    </svg>
+    <strong>Режим подписей</strong>
+    <span class="text-amber-600">— кликни на подпись и редактируй прямо в тексте</span>
+  </div>
+  <div class="flex items-center gap-2">
+    <button onclick="exitCaptionMode()"
+            class="focus-ring text-sm text-amber-700 border border-amber-300 rounded px-3 py-1.5 bg-white hover:bg-amber-50 transition-colors">
+      Отмена
+    </button>
+    <button onclick="copyCaptionJson()"
+            class="focus-ring text-sm text-white bg-amber-500 hover:bg-amber-600 rounded px-3 py-1.5 font-medium transition-colors">
+      Скопировать JSON
+    </button>
+  </div>
+</div>
+
+<!-- ─── TOAST ────────────────────────────────────────────────────────────────── -->
+<div id="toast"
+     class="bg-slate-800 text-white text-sm px-4 py-2.5 rounded-lg shadow-xl items-center gap-2">
+  <span id="toast-msg"></span>
+</div>
+
+<!-- ─── DATA ────────────────────────────────────────────────────────────────── -->
+<script src="data/competitors.js"></script>
+
+<!-- ─── APP ─────────────────────────────────────────────────────────────────── -->
+<script>
+'use strict';
+
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+const CARD_COLORS = [
+  '#3b82f6','#8b5cf6','#ec4899','#f59e0b',
+  '#10b981','#06b6d4','#f97316','#84cc16',
+  '#6366f1','#14b8a6',
+];
+
+const STATUS_CONFIG = {
+  yes:     { sym: '✓', label: 'Да',      cls: 'text-emerald-600 font-bold' },
+  no:      { sym: '✗', label: 'Нет',     cls: 'text-slate-300' },
+  partial: { sym: '◐', label: 'Частично',cls: 'text-amber-500' },
+  unknown: { sym: '?', label: 'Неизвестно', cls: 'text-slate-300' },
+};
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+const state = {
+  search: '',
+  segmentFilter: '',
+  hideUnknownRows: false,
+  hideTierB: false,
+};
+
+function saveState() {
+  try { localStorage.setItem('ai_math_az_state', JSON.stringify(state)); } catch(e) {}
+}
+function loadState() {
+  try {
+    const s = JSON.parse(localStorage.getItem('ai_math_az_state') || '{}');
+    Object.assign(state, s);
+  } catch(e) {}
+}
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+function esc(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function getCardColor(slug) {
+  let h = 0;
+  for (const c of String(slug)) h = (h * 31 + c.charCodeAt(0)) & 0x7fffffff;
+  return CARD_COLORS[h % CARD_COLORS.length];
+}
+
+function getInitials(name) {
+  const words = String(name).split(/[\s\/\-]+/).filter(Boolean);
+  if (words.length === 1) return words[0].slice(0,2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
+
+function parseSegments(segment) {
+  if (!segment) return [];
+  return segment.replace(/\//g,' ').split(/[\s,+]+/).filter(s => /^B2[GBC]$/.test(s));
+}
+
+function getData() {
+  if (typeof window.COMPETITORS_DATA !== 'undefined') return window.COMPETITORS_DATA;
+  return { features: [], competitors: [], metadata: {} };
+}
+
+// ─── ROUTER ───────────────────────────────────────────────────────────────────
+function parseRoute() {
+  const hash = window.location.hash || '';
+  if (hash.startsWith('#/competitor/'))
+    return { view: 'detail', id: decodeURIComponent(hash.slice('#/competitor/'.length)) };
+  if (hash.startsWith('#/feature/'))
+    return { view: 'feature', id: decodeURIComponent(hash.slice('#/feature/'.length)) };
+  if (hash === '#/features') return { view: 'features' };
+  return { view: 'cards' };
+}
+
+function navigate(path) { window.location.hash = path; }
+
+// ─── NAV ──────────────────────────────────────────────────────────────────────
+function updateNav(view) {
+  const topView = (view === 'detail') ? 'cards'
+                : (view === 'feature') ? 'features'
+                : view;
+  document.querySelectorAll('.nav-tab').forEach(btn => {
+    const id = btn.id.replace('nav-', '');
+    btn.className = btn.className
+      .replace(/\b(text-slate-900|text-slate-500|border-slate-900|border-transparent|hover:text-slate-700)\b/g, '').trim();
+    if (id === topView) {
+      btn.classList.add('text-slate-900', 'border-slate-900');
+    } else {
+      btn.classList.add('text-slate-500', 'border-transparent', 'hover:text-slate-700');
+    }
+  });
+
+  // Meta info
+  const data = getData();
+  const metaEl = document.getElementById('meta-count');
+  if (metaEl) metaEl.textContent = `${data.competitors.length} компаний · ${data.features.length} параметров`;
+  const metaUpd = document.getElementById('meta-updated');
+  if (metaUpd && data.metadata?.updated_at) {
+    metaUpd.textContent = 'обновлено ' + data.metadata.updated_at.slice(0,10);
+  }
+}
+
+// ─── RENDER: CARDS VIEW ───────────────────────────────────────────────────────
+function renderCardsView() {
+  const data = getData();
+  loadState();
+
+  const segments = [...new Set(
+    data.competitors.flatMap(c => parseSegments(c.segment)).filter(Boolean)
+  )].sort();
+
+  return `
+    <div class="sticky-bar bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3 flex-wrap">
+      <div class="relative flex-1 min-w-48 max-w-xs">
+        <svg class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+             width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input id="search-input" type="search" placeholder="Поиск по названию или описанию…"
+               value="${esc(state.search)}"
+               oninput="state.search=this.value; saveState(); rerenderCards()"
+               class="focus-ring w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded bg-white text-slate-900 placeholder-slate-400"/>
+      </div>
+      <select id="seg-filter"
+              onchange="state.segmentFilter=this.value; saveState(); rerenderCards()"
+              class="focus-ring text-sm border border-slate-200 rounded px-2.5 py-1.5 bg-white text-slate-700">
+        <option value="">Все сегменты</option>
+        ${segments.map(s => `<option value="${esc(s)}" ${state.segmentFilter===s?'selected':''}>${esc(s)}</option>`).join('')}
+      </select>
+      <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+        <input type="checkbox" ${state.hideTierB?'checked':''} onchange="state.hideTierB=this.checked; saveState(); rerenderCards()"
+               class="rounded border-slate-300 text-slate-800 focus:ring-slate-500"/>
+        Только полные данные
+      </label>
+      <span id="cards-count" class="text-xs text-slate-400 ml-auto"></span>
+    </div>
+    <div id="cards-grid" class="p-6">
+      ${renderCardsGrid(data)}
+    </div>
+  `;
+}
+
+function getFilteredCompetitors(data) {
+  let list = data.competitors;
+  if (state.hideTierB)       list = list.filter(c => c.data_tier === 'A');
+  if (state.segmentFilter)   list = list.filter(c => parseSegments(c.segment).includes(state.segmentFilter));
+  if (state.search.trim()) {
+    const q = state.search.toLowerCase();
+    list = list.filter(c =>
+      c.name?.toLowerCase().includes(q) ||
+      c.summary_short?.toLowerCase().includes(q) ||
+      c.geography?.toLowerCase().includes(q) ||
+      c.segment?.toLowerCase().includes(q)
+    );
+  }
+  return list;
+}
+
+function renderCardsGrid(data) {
+  const list = getFilteredCompetitors(data);
+  setTimeout(() => {
+    const el = document.getElementById('cards-count');
+    if (el) el.textContent = `${list.length} из ${data.competitors.length}`;
+  }, 0);
+
+  if (list.length === 0) {
+    return `<div class="text-center py-24 text-slate-400">
+      <p class="text-2xl mb-2">—</p>
+      <p class="text-sm">Ничего не найдено. Попробуй изменить фильтры.</p>
+    </div>`;
+  }
+
+  return `<div class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(310px, 1fr))">
+    ${list.map(c => renderCard(c, data)).join('')}
+  </div>`;
+}
+
+function renderCard(comp, data) {
+  const color = getCardColor(comp.id);
+  const initials = getInitials(comp.name);
+
+  // Top "yes" features for badge display
+  const topFeats = comp.data_tier === 'A'
+    ? data.features
+        .filter(f => comp.features?.[f.id]?.status === 'yes')
+        .slice(0, 4)
+        .map(f => f.name)
+    : [];
+
+  const tierBadge = comp.data_tier === 'B'
+    ? `<span class="text-xs px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-mono" title="Частичные данные">B</span>`
+    : '';
+
+  const segBadges = parseSegments(comp.segment)
+    .map(s => `<span class="text-xs px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">${esc(s)}</span>`)
+    .join('');
+
+  return `
+    <article class="competitor-card bg-white border border-slate-200 rounded-lg p-4 cursor-pointer"
+             tabindex="0"
+             onclick="navigate('#/competitor/${esc(comp.id)}')"
+             onkeydown="if(event.key==='Enter'||event.key===' '){navigate('#/competitor/${esc(comp.id)}')}"
+             aria-label="${esc(comp.name)}">
+      <div class="flex items-start gap-3 mb-3">
+        <div class="w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-semibold flex-shrink-0"
+             style="background-color:${color}" aria-hidden="true">
+          ${esc(initials)}
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-semibold text-slate-900">${esc(comp.name)}</span>
+            ${tierBadge}
+          </div>
+          <div class="flex items-center gap-1 mt-1 flex-wrap">${segBadges}</div>
+        </div>
+      </div>
+
+      ${comp.geography ? `<p class="text-xs text-slate-400 mb-2">${esc(comp.geography)}</p>` : ''}
+
+      <p class="text-sm text-slate-700 line-clamp-2 mb-3 leading-snug">
+        ${esc(comp.summary_short || '—')}
+      </p>
+
+      ${topFeats.length > 0 ? `
+        <div class="flex flex-wrap gap-1 border-t border-slate-50 pt-2.5">
+          ${topFeats.map(f => `<span class="text-xs px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded">${esc(f)}</span>`).join('')}
+        </div>
+      ` : comp.data_tier === 'B' ? `
+        <p class="text-xs text-slate-300 italic border-t border-slate-50 pt-2.5">Частичные данные</p>
+      ` : ''}
+    </article>
+  `;
+}
+
+function rerenderCards() {
+  const grid = document.getElementById('cards-grid');
+  if (grid) grid.innerHTML = renderCardsGrid(getData());
+}
+
+// ─── RENDER: DETAIL VIEW ──────────────────────────────────────────────────────
+function renderDetailView(comp, data) {
+  const color = getCardColor(comp.id);
+  const initials = getInitials(comp.name);
+
+  const featuresByCategory = {};
+  for (const feat of data.features) {
+    if (!featuresByCategory[feat.category]) featuresByCategory[feat.category] = [];
+    featuresByCategory[feat.category].push(feat);
+  }
+
+  function renderFeatureTable() {
+    if (!comp.features || Object.keys(comp.features).length === 0) {
+      return `<div class="text-sm text-slate-400 italic py-4">
+        Детальные данные по фичам для этого продукта не собраны (Tier B).
+      </div>`;
+    }
+    const cats = Object.keys(featuresByCategory);
+    return `<div class="feature-table-wrap rounded-lg border border-slate-200 overflow-hidden">
+      <table class="feature-table w-full text-sm">
+        <thead>
+          <tr class="bg-slate-50 border-b border-slate-200 text-left">
+            <th class="px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-56">Параметр</th>
+            <th class="px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-24">Статус</th>
+            <th class="px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Детали</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${cats.map(cat => {
+            const feats = featuresByCategory[cat];
+            return `
+              <tr class="bg-slate-50/50">
+                <td colspan="3" class="px-4 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100">
+                  ${esc(cat)}
+                </td>
+              </tr>
+              ${feats.map((feat, idx) => {
+                const fd = comp.features[feat.id] || { status: 'unknown', notes: null };
+                const sc = STATUS_CONFIG[fd.status] || STATUS_CONFIG.unknown;
+                const rowBg = idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30';
+                return `
+                  <tr class="${rowBg} border-b border-slate-100">
+                    <td class="px-4 py-2.5 text-slate-700 align-top">
+                      <div class="font-medium">${esc(feat.name)}</div>
+                      <div class="text-xs text-slate-400 mt-0.5">${esc(feat.description)}</div>
+                    </td>
+                    <td class="px-4 py-2.5 align-top">
+                      <span class="${sc.cls} text-base leading-none" title="${esc(sc.label)}">${sc.sym}</span>
+                      <span class="ml-1.5 text-xs text-slate-500">${esc(sc.label)}</span>
+                    </td>
+                    <td class="px-4 py-2.5 align-top">
+                      <p class="text-slate-600 text-sm notes-text">${esc(fd.notes || '—')}</p>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  }
+
+  function renderPanel(title, items, config, panelId) {
+    if (!items || items.length === 0) return '';
+    const { bgCls, textCls, dotCls, iconPath } = config;
+    return `
+      <div class="rounded-lg border ${bgCls} p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-xs font-semibold ${textCls} uppercase tracking-wide flex items-center gap-1.5">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPath}</svg>
+            ${esc(title)}
+          </h3>
+          <button onclick="copyPanelJson('${panelId}')"
+                  class="focus-ring text-slate-400 hover:text-slate-600 p-0.5 rounded transition-colors"
+                  title="Скопировать как JSON">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+          </button>
+        </div>
+        <ul class="space-y-1.5" id="${panelId}">
+          ${items.map(item => `
+            <li class="flex gap-2 text-sm text-slate-700">
+              <span class="${dotCls} mt-[7px] w-1.5 h-1.5 rounded-full flex-shrink-0"></span>
+              <span class="panel-item-edit flex-1" contenteditable="true"
+                    onkeydown="if(event.key==='Enter')event.preventDefault()">${esc(item)}</span>
+            </li>
+          `).join('')}
+        </ul>
+      </div>
+    `;
+  }
+
+  const strengthsPanel = renderPanel('Сильные стороны', comp.strengths, {
+    bgCls: 'border-emerald-100 bg-emerald-50',
+    textCls: 'text-emerald-700',
+    dotCls: 'bg-emerald-400',
+    iconPath: '<polyline points="20 6 9 17 4 12"/>',
+  }, `panel-strengths-${comp.id}`);
+
+  const weaknessesPanel = renderPanel('Слабые стороны', comp.weaknesses, {
+    bgCls: 'border-red-100 bg-red-50',
+    textCls: 'text-red-700',
+    dotCls: 'bg-red-400',
+    iconPath: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  }, `panel-weaknesses-${comp.id}`);
+
+  const screenshotCount = comp.screenshots?.length || 0;
+  const screenshotsSection = screenshotCount > 0
+    ? `
+      <section aria-labelledby="sect-screenshots">
+        <div class="flex items-center justify-between mb-4">
+          <h2 id="sect-screenshots" class="text-base font-semibold text-slate-800">
+            Скриншоты
+            <span class="ml-2 text-sm font-normal text-slate-400">${screenshotCount}</span>
+          </h2>
+          <button onclick="enableCaptionMode('${esc(comp.id)}')"
+                  class="focus-ring flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded px-2.5 py-1.5 bg-white hover:bg-slate-50 transition-colors">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+            </svg>
+            Подписать
+          </button>
+        </div>
+        <div class="screenshot-grid">
+          ${comp.screenshots.map((s, sIdx) => {
+            const tagsJson = JSON.stringify(s.tags || []).replace(/"/g, '&quot;');
+            const needsCaption = !s.caption || s.caption.startsWith('[TODO]');
+            return `
+              <figure class="screenshot-cap-card screenshot-card rounded-lg border ${needsCaption ? 'border-amber-200 bg-amber-50/30' : 'border-slate-200 bg-white'} overflow-hidden cursor-pointer"
+                      data-file="${esc(s.file)}"
+                      data-tags="${tagsJson}"
+                      onclick="if(!_captionModeActive)openLightbox(${sIdx})"
+                      tabindex="0"
+                      onkeydown="if(event.key==='Enter'&&!_captionModeActive)openLightbox(${sIdx})"
+                      role="button" aria-label="${esc(s.caption || 'Скриншот')}">
+                <button class="screenshot-delete-btn"
+                        onclick="deleteScreenshot(event,'${esc(s.file)}')"
+                        title="Удалить скриншот" aria-label="Удалить">×</button>
+                <div class="overflow-hidden bg-slate-100">
+                  <img src="${esc(s.file)}" alt="${esc(s.caption || comp.name)}"
+                       loading="lazy" class="screenshot-img">
+                </div>
+                <figcaption class="p-3 border-t ${needsCaption ? 'border-amber-100' : 'border-slate-100'}">
+                  <p class="caption-text text-sm font-medium leading-snug ${needsCaption ? 'text-amber-500 italic' : 'text-slate-800'}"
+                     data-placeholder="Добавь подпись…">${esc(needsCaption ? '' : s.caption)}</p>
+                  ${(s.tags && s.tags.length) ? `
+                    <div class="flex flex-wrap gap-1 mt-2">
+                      ${s.tags.map(t => `<span class="text-xs px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded">${esc(t)}</span>`).join('')}
+                    </div>
+                  ` : ''}
+                </figcaption>
+              </figure>
+            `;
+          }).join('')}
+        </div>
+        ${comp.screenshots.some(s => !s.caption || s.caption.startsWith('[TODO]')) ? `
+          <p class="text-xs text-amber-600 mt-3 flex items-center gap-1.5">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            Есть скриншоты без подписей — нажми «Подписать» чтобы добавить
+          </p>
+        ` : ''}
+      </section>
+    `
+    : `
+      <section aria-labelledby="sect-screenshots"
+               class="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8">
+        <h2 id="sect-screenshots"
+            class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-4">
+          Скриншоты
+        </h2>
+        <p class="text-sm text-slate-500 mb-4">Как добавить скриншоты:</p>
+        <ol class="text-sm text-slate-500 space-y-2 mb-5 list-decimal list-inside">
+          <li>Положи файлы в
+            <code class="bg-white border border-slate-200 px-1.5 py-0.5 rounded text-xs">
+              competitors/screenshots/${esc(comp.id)}/
+            </code>
+          </li>
+          <li>Добавь запись в <code class="bg-white border border-slate-200 px-1.5 py-0.5 rounded text-xs">competitors.json</code>
+            в поле <code class="bg-white border border-slate-200 px-1.5 py-0.5 rounded text-xs">screenshots</code>:</li>
+        </ol>
+        <pre class="text-xs bg-white border border-slate-200 rounded-lg p-4 text-slate-600 overflow-x-auto leading-relaxed">{
+  "file": "screenshots/${esc(comp.id)}/имя-файла.png",
+  "caption": "Описание — что показывает этот скрин",
+  "tags": ["teacher-dashboard", "onboarding"]
+}</pre>
+        <p class="text-xs text-slate-400 mt-4">
+          После правок запусти
+          <code class="bg-white border border-slate-200 px-1.5 py-0.5 rounded">python _parse/generate_json.py</code>
+          и перезагрузи страницу.
+        </p>
+      </section>
+    `;
+
+  const tierBadge = comp.data_tier === 'B'
+    ? `<span class="text-xs px-2 py-0.5 bg-slate-100 text-slate-500 rounded font-mono">Tier B · частичные данные</span>`
+    : `<span class="text-xs px-2 py-0.5 bg-slate-800 text-white rounded font-mono">Tier A · полные данные</span>`;
+
+  return `
+    <div class="max-w-5xl mx-auto px-6 py-8 space-y-8">
+
+      <!-- Header -->
+      <div>
+        <button onclick="navigate('#/cards')"
+                class="focus-ring flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 mb-4 transition-colors">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          Все конкуренты
+        </button>
+
+        <div class="flex items-start gap-4">
+          <div class="w-14 h-14 rounded-xl flex items-center justify-center text-white text-xl font-semibold flex-shrink-0"
+               style="background-color:${color}" aria-hidden="true">
+            ${esc(initials)}
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-3 flex-wrap">
+              <h1 class="text-2xl font-bold text-slate-900">${esc(comp.name)}</h1>
+              ${tierBadge}
+            </div>
+            <div class="flex items-center gap-3 mt-2 flex-wrap">
+              ${comp.segment ? `<span class="text-sm text-slate-500">${esc(comp.segment)}</span>` : ''}
+              ${comp.age_range ? `<span class="text-sm text-slate-400">·&nbsp;${esc(comp.age_range)}</span>` : ''}
+              ${comp.url ? `
+                <a href="${esc(comp.url)}" target="_blank" rel="noopener noreferrer"
+                   class="focus-ring flex items-center gap-1 text-sm text-slate-600 hover:text-slate-900 underline transition-colors ml-auto">
+                  ${esc(comp.url.replace(/^https?:\/\//,''))}
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                       stroke-linecap="round" stroke-linejoin="round" aria-label="Внешняя ссылка">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                    <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                  </svg>
+                </a>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Meta pills -->
+      <div class="flex flex-wrap gap-2">
+        ${comp.geography ? `<div class="text-xs px-3 py-1.5 bg-slate-100 rounded text-slate-600"><span class="font-medium text-slate-500">Рынок&nbsp;</span>${esc(comp.geography)}</div>` : ''}
+        ${comp.evidence  ? `<div class="text-xs px-3 py-1.5 bg-slate-100 rounded text-slate-600"><span class="font-medium text-slate-500">Доказательства&nbsp;</span>${esc(comp.evidence)}</div>` : ''}
+      </div>
+
+      <!-- AI Moat -->
+      ${comp.ai_moat ? `
+        <div class="rounded-lg border border-slate-200 p-4 bg-white">
+          <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">AI Moat</h2>
+          <p class="text-sm text-slate-700 leading-relaxed">${esc(comp.ai_moat)}</p>
+        </div>
+      ` : ''}
+
+      <!-- Summary -->
+      ${comp.summary_long ? `
+        <section aria-labelledby="sect-summary">
+          <h2 id="sect-summary" class="text-base font-semibold text-slate-800 mb-3">Описание</h2>
+          <p class="text-sm text-slate-700 leading-relaxed">${esc(comp.summary_long)}</p>
+        </section>
+      ` : comp.summary_short ? `
+        <section aria-labelledby="sect-summary">
+          <h2 id="sect-summary" class="text-base font-semibold text-slate-800 mb-3">Описание</h2>
+          <p class="text-sm text-slate-700 leading-relaxed">${esc(comp.summary_short)}</p>
+        </section>
+      ` : ''}
+
+      <!-- Strengths / Weaknesses -->
+      ${(comp.strengths?.length || comp.weaknesses?.length) ? `
+        <section aria-label="Оценка">
+          <div class="grid grid-cols-2 gap-4">
+            ${strengthsPanel}
+            ${weaknessesPanel}
+          </div>
+        </section>
+      ` : ''}
+
+      <!-- Feature table -->
+      <section aria-labelledby="sect-features">
+        <h2 id="sect-features" class="text-base font-semibold text-slate-800 mb-4">Параметры сравнения</h2>
+        ${renderFeatureTable()}
+      </section>
+
+      <!-- Screenshots -->
+      ${screenshotsSection}
+
+    </div>
+  `;
+}
+
+// ─── RENDER: FEATURES MATRIX VIEW ────────────────────────────────────────────
+function renderFeaturesView() {
+  const data = getData();
+
+  const segments = [...new Set(
+    data.competitors.flatMap(c => parseSegments(c.segment)).filter(Boolean)
+  )].sort();
+
+  const { comps, filteredFeats } = getFilteredFeaturesData(data);
+
+  return `
+    <div class="sticky-bar bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3 flex-wrap">
+      <div class="relative flex-1 min-w-48 max-w-xs">
+        <svg class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+             width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input type="search" placeholder="Поиск по параметру…"
+               value="${esc(state.search)}"
+               oninput="state.search=this.value; saveState(); rerenderFeatureMatrix()"
+               class="focus-ring w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded bg-white text-slate-900 placeholder-slate-400"/>
+      </div>
+      <select onchange="state.segmentFilter=this.value; saveState(); rerenderFeatureMatrix()"
+              class="focus-ring text-sm border border-slate-200 rounded px-2.5 py-1.5 bg-white text-slate-700">
+        <option value="">Все сегменты</option>
+        ${segments.map(s => `<option value="${esc(s)}" ${state.segmentFilter===s?'selected':''}>${esc(s)}</option>`).join('')}
+      </select>
+      <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+        <input type="checkbox" ${state.hideTierB?'checked':''}
+               onchange="state.hideTierB=this.checked; saveState(); rerenderFeatureMatrix()"
+               class="rounded border-slate-300 text-slate-800 focus:ring-slate-500"/>
+        Только Tier A
+      </label>
+      <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+        <input type="checkbox" ${state.hideUnknownRows?'checked':''}
+               onchange="state.hideUnknownRows=this.checked; saveState(); rerenderFeatureMatrix()"
+               class="rounded border-slate-300 text-slate-800 focus:ring-slate-500"/>
+        Скрыть строки «?»
+      </label>
+    </div>
+    <div id="feat-matrix-wrap">${buildFeatureMatrix(comps, filteredFeats)}</div>
+  `;
+}
+
+function getFilteredFeaturesData(data) {
+  let comps = data.competitors;
+  if (state.hideTierB)     comps = comps.filter(c => c.data_tier === 'A');
+  if (state.segmentFilter) comps = comps.filter(c => parseSegments(c.segment).includes(state.segmentFilter));
+
+  let filteredFeats = data.features;
+  if (state.search.trim()) {
+    const q = state.search.toLowerCase();
+    filteredFeats = filteredFeats.filter(f =>
+      f.name.toLowerCase().includes(q) || (f.description || '').toLowerCase().includes(q)
+    );
+  }
+  if (state.hideUnknownRows) {
+    filteredFeats = filteredFeats.filter(feat =>
+      comps.some(c => {
+        const st = c.features?.[feat.id]?.status;
+        return st && st !== 'unknown';
+      })
+    );
+  }
+  return { comps, filteredFeats };
+}
+
+function rerenderFeatureMatrix() {
+  const wrap = document.getElementById('feat-matrix-wrap');
+  if (!wrap) return;
+  const { comps, filteredFeats } = getFilteredFeaturesData(getData());
+  wrap.innerHTML = buildFeatureMatrix(comps, filteredFeats);
+}
+
+function buildFeatureMatrix(comps, filteredFeats) {
+  if (!filteredFeats.length || !comps.length) {
+    return `<div class="text-center py-16 text-slate-400 text-sm">Нет данных по заданным фильтрам.</div>`;
+  }
+
+  const catGroups = {};
+  for (const feat of filteredFeats) {
+    if (!catGroups[feat.category]) catGroups[feat.category] = [];
+    catGroups[feat.category].push(feat);
+  }
+
+  // Cell background + text colour by status
+  const CELL_STYLE = {
+    yes:     { bg: 'bg-emerald-50', text: 'text-emerald-800' },
+    no:      { bg: 'bg-red-50',     text: 'text-red-700'     },
+    partial: { bg: 'bg-amber-50',   text: 'text-amber-800'   },
+    unknown: { bg: '',              text: 'text-slate-300'    },
+  };
+
+  const compHeaders = comps.map(c => {
+    const color = getCardColor(c.id);
+    const inits = getInitials(c.name);
+    return `<th class="matrix-col-header border-b-2 border-slate-200 p-0" style="min-width:120px; width:120px;">
+      <button onclick="navigate('#/competitor/${esc(c.id)}')"
+              class="focus-ring w-full flex flex-col items-center gap-1 py-2.5 px-2 hover:bg-slate-50 transition-colors"
+              title="${esc(c.name)}">
+        <div class="w-7 h-7 rounded-md flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+             style="background-color:${color}" aria-hidden="true">${esc(inits)}</div>
+        <span class="text-[11px] text-slate-600 leading-tight text-center break-words w-full line-clamp-2">${esc(c.name)}</span>
+        ${c.data_tier === 'B' ? `<span class="text-[9px] text-slate-300 font-mono leading-none">B</span>` : ''}
+      </button>
+    </th>`;
+  }).join('');
+
+  const bodyRows = Object.keys(catGroups).map(cat => {
+    const catRow = `<tr>
+      <td colspan="${comps.length + 1}"
+          class="matrix-row-header px-4 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide bg-slate-50 border-y border-slate-100">
+        ${esc(cat)}
+      </td>
+    </tr>`;
+
+    const featRows = catGroups[cat].map((feat, idx) => {
+      const rowBg = idx % 2 === 0 ? 'bg-white' : 'bg-slate-50';
+      const statusCells = comps.map(c => {
+        const fd = c.features?.[feat.id] || { status: 'unknown', notes: null };
+        const style = CELL_STYLE[fd.status] || CELL_STYLE.unknown;
+        const sc = STATUS_CONFIG[fd.status] || STATUS_CONFIG.unknown;
+        // Show notes text if available, else fallback to status label (or blank for unknown)
+        const cellText = fd.notes?.trim() || (fd.status !== 'unknown' ? sc.label : '');
+        return `<td class="border-b border-slate-100 ${style.bg} align-top p-2" style="vertical-align:top; word-break:break-word; overflow-wrap:break-word;">
+          <p class="text-xs ${style.text} leading-snug">${esc(cellText)}</p>
+        </td>`;
+      }).join('');
+
+      return `<tr>
+        <th scope="row" class="matrix-row-header border-b border-slate-100 ${rowBg} px-4 py-2.5 text-left"
+            style="min-width:220px; max-width:260px;">
+          <button onclick="navigate('#/feature/${esc(feat.id)}')"
+                  class="focus-ring text-left w-full group">
+            <span class="text-sm font-medium text-slate-800 group-hover:underline decoration-slate-400">${esc(feat.name)}</span>
+            ${feat.description ? `<p class="text-xs text-slate-400 mt-0.5 font-normal leading-snug">${esc(feat.description)}</p>` : ''}
+          </button>
+        </th>
+        ${statusCells}
+      </tr>`;
+    }).join('');
+
+    return catRow + featRows;
+  }).join('');
+
+  return `
+    <div class="matrix-wrap" style="height: calc(100vh - 114px);">
+      <table class="matrix-table w-full text-sm" style="table-layout: fixed;">
+        <thead>
+          <tr>
+            <th class="matrix-corner border-b-2 border-r border-slate-200 px-4 py-3 text-left"
+                style="width:220px; min-width:220px;">
+              <span class="text-xs font-medium text-slate-500 uppercase tracking-wide">Параметр</span>
+            </th>
+            ${compHeaders}
+          </tr>
+        </thead>
+        <tbody>${bodyRows}</tbody>
+      </table>
+    </div>`;
+}
+
+// ─── RENDER: FEATURE DETAIL VIEW ─────────────────────────────────────────────
+function renderFeatureDetailView(feat, data) {
+  const statusCounts = {};
+  for (const k of Object.keys(STATUS_CONFIG)) statusCounts[k] = 0;
+  for (const c of data.competitors) {
+    const st = (c.features?.[feat.id]?.status) || 'unknown';
+    statusCounts[st] = (statusCounts[st] || 0) + 1;
+  }
+
+  const rows = data.competitors.map((c, idx) => {
+    const fd = c.features?.[feat.id] || { status: 'unknown', notes: null };
+    const sc = STATUS_CONFIG[fd.status] || STATUS_CONFIG.unknown;
+    const color = getCardColor(c.id);
+    const inits = getInitials(c.name);
+    const bg = idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30';
+    return `<tr class="${bg} border-b border-slate-100 hover:bg-slate-50/60">
+      <td class="px-4 py-3">
+        <button onclick="navigate('#/competitor/${esc(c.id)}')"
+                class="focus-ring flex items-center gap-3 text-left group">
+          <div class="w-7 h-7 rounded-md flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+               style="background-color:${color}" aria-hidden="true">${esc(inits)}</div>
+          <span class="text-sm font-medium text-slate-800 group-hover:underline">${esc(c.name)}</span>
+          ${c.data_tier === 'B' ? `<span class="ml-1 text-xs text-slate-400 font-mono">B</span>` : ''}
+        </button>
+      </td>
+      <td class="px-4 py-3 text-center whitespace-nowrap">
+        <span class="${sc.cls} text-base">${sc.sym}</span>
+        <span class="ml-1.5 text-xs text-slate-500">${esc(sc.label)}</span>
+      </td>
+      <td class="px-4 py-3 text-sm text-slate-600 notes-text">${esc(fd.notes || '—')}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div class="max-w-5xl mx-auto px-6 py-8">
+      <button onclick="navigate('#/features')"
+              class="focus-ring flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 mb-6 transition-colors">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+        Матрица по фичам
+      </button>
+
+      <div class="mb-6">
+        <p class="text-xs text-slate-400 uppercase tracking-wide font-medium mb-1">${esc(feat.category)}</p>
+        <h1 class="text-2xl font-bold text-slate-900 mb-2">${esc(feat.name)}</h1>
+        ${feat.description ? `<p class="text-sm text-slate-600 leading-relaxed">${esc(feat.description)}</p>` : ''}
+      </div>
+
+      <div class="flex gap-4 flex-wrap mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
+        ${Object.entries(STATUS_CONFIG).map(([k, v]) => {
+          const count = statusCounts[k] || 0;
+          return `<div class="flex items-center gap-1.5">
+            <span class="${v.cls} text-base leading-none">${v.sym}</span>
+            <span class="text-sm text-slate-600">${esc(v.label)}: <strong class="font-semibold text-slate-900">${count}</strong></span>
+          </div>`;
+        }).join('')}
+      </div>
+
+      <div class="rounded-lg border border-slate-200 overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-50 border-b border-slate-200">
+            <tr class="text-left">
+              <th class="px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-52">Продукт</th>
+              <th class="px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-32">Статус</th>
+              <th class="px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Детали</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ─── CAPTION MODE ─────────────────────────────────────────────────────────────
+let _captionModeActive = false;
+
+function enableCaptionMode(compId) {
+  _captionModeActive = true;
+  document.querySelectorAll('.caption-text').forEach(el => {
+    el.contentEditable = 'true';
+  });
+  document.getElementById('caption-bar').classList.add('visible');
+  document.body.style.paddingBottom = '60px';
+}
+
+function exitCaptionMode() {
+  _captionModeActive = false;
+  document.querySelectorAll('.caption-text').forEach(el => {
+    el.contentEditable = 'false';
+  });
+  document.getElementById('caption-bar').classList.remove('visible');
+  document.body.style.paddingBottom = '';
+}
+
+function copyCaptionJson() {
+  const cards = document.querySelectorAll('.screenshot-cap-card');
+  if (!cards.length) return;
+
+  const screenshots = Array.from(cards).map(card => {
+    const captionEl = card.querySelector('.caption-text');
+    let tags = [];
+    try { tags = JSON.parse(card.dataset.tags.replace(/&quot;/g, '"')); } catch(e) {}
+    return {
+      file:    card.dataset.file,
+      caption: (captionEl?.innerText || '').trim(),
+      tags,
+    };
+  });
+
+  const jsonText = '"screenshots": ' + JSON.stringify(screenshots, null, 2);
+
+  const tryClipboard = navigator.clipboard
+    ? navigator.clipboard.writeText(jsonText)
+    : Promise.reject('no clipboard api');
+
+  tryClipboard
+    .then(() => {
+      showToast('JSON скопирован — вставь в поле "screenshots" в competitors.json и запусти generate_json.py');
+      exitCaptionMode();
+    })
+    .catch(() => {
+      // Fallback: select a hidden textarea
+      const ta = document.createElement('textarea');
+      ta.value = jsonText;
+      Object.assign(ta.style, { position:'fixed', top:'-9999px', opacity:'0' });
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+      showToast('JSON скопирован (fallback)');
+      exitCaptionMode();
+    });
+}
+
+function showToast(msg, ms = 4000) {
+  const el  = document.getElementById('toast');
+  const txt = document.getElementById('toast-msg');
+  txt.textContent = msg;
+  el.classList.add('visible');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('visible'), ms);
+}
+
+// ─── TOOLTIP FUNCTIONS ────────────────────────────────────────────────────────
+function showTooltip(event, el) {
+  const text = el.dataset.notes;
+  if (!text) return;
+  const tt = document.getElementById('tooltip');
+  tt.textContent = text;
+  positionTooltip(event, tt);
+  tt.classList.add('visible');
+}
+function hideTooltip() {
+  document.getElementById('tooltip').classList.remove('visible');
+}
+function positionTooltip(event, tt) {
+  if (!tt) tt = document.getElementById('tooltip');
+  const m = 14;
+  let x = event.clientX + m;
+  let y = event.clientY + m;
+  const w = tt.offsetWidth || 200;
+  const h = tt.offsetHeight || 50;
+  if (x + w > window.innerWidth  - 8) x = event.clientX - w - m;
+  if (y + h > window.innerHeight - 8) y = event.clientY - h - m;
+  tt.style.left = x + 'px';
+  tt.style.top  = y + 'px';
+}
+document.addEventListener('mousemove', e => {
+  const tt = document.getElementById('tooltip');
+  if (tt.classList.contains('visible')) positionTooltip(e, tt);
+});
+
+// ─── LIGHTBOX ─────────────────────────────────────────────────────────────────
+// window._lbData is injected by a <script> tag in the screenshots section on each render
+let _lbIdx = 0;
+
+function openLightbox(idx) {
+  _lbIdx = idx;
+  _lbRefresh();
+  document.getElementById('lightbox').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function _lbRefresh() {
+  const data = window._lbData || { screenshots: [], compName: '', compId: '' };
+  const s = data.screenshots[_lbIdx];
+  if (!s) return;
+  const img = document.getElementById('lb-img');
+  img.src = s.file;
+  img.alt = s.caption || data.compName;
+  document.getElementById('lb-comp').textContent = data.compName;
+  const captionEl = document.getElementById('lb-caption');
+  const isTodo = !s.caption || s.caption.startsWith('[TODO]');
+  captionEl.innerText = isTodo ? '' : s.caption;
+  document.getElementById('lb-link').href = '#/competitor/' + encodeURIComponent(data.compId);
+  const tagsEl = document.getElementById('lb-tags');
+  tagsEl.innerHTML = (s.tags || [])
+    .map(t => `<span class="text-xs px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded">${esc(t)}</span>`)
+    .join('');
+  // Counter + nav arrows visibility / disabled state
+  const n = data.screenshots.length;
+  document.getElementById('lb-counter').textContent = n > 1 ? `${_lbIdx + 1} / ${n}` : '';
+  document.getElementById('lb-prev').style.display = n > 1 ? '' : 'none';
+  document.getElementById('lb-next').style.display = n > 1 ? '' : 'none';
+  document.getElementById('lb-prev').style.opacity  = _lbIdx === 0     ? '0.35' : '1';
+  document.getElementById('lb-next').style.opacity  = _lbIdx === n - 1 ? '0.35' : '1';
+  document.getElementById('lb-prev').disabled = _lbIdx === 0;
+  document.getElementById('lb-next').disabled = _lbIdx === n - 1;
+}
+
+function lbNavigate(dir) {
+  const n = (window._lbData?.screenshots || []).length;
+  _lbIdx = Math.max(0, Math.min(n - 1, _lbIdx + dir));
+  _lbRefresh();
+}
+
+// ─── PANEL: copy strengths / weaknesses as JSON ───────────────────────────────
+function copyPanelJson(panelId) {
+  const list = document.getElementById(panelId);
+  if (!list) return;
+  const items = Array.from(list.querySelectorAll('.panel-item-edit'))
+    .map(el => el.innerText.trim()).filter(Boolean);
+  const json = JSON.stringify(items, null, 2);
+  navigator.clipboard.writeText(json)
+    .then(() => showToast('Скопировано!'))
+    .catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = json; document.body.appendChild(ta);
+      ta.select(); document.execCommand('copy'); ta.remove();
+      showToast('Скопировано!');
+    });
+}
+
+// ─── SCREENSHOTS: delete from view ────────────────────────────────────────────
+function deleteScreenshot(event, fileAttr) {
+  event.stopPropagation();
+  const card = document.querySelector(`.screenshot-cap-card[data-file="${CSS.escape(fileAttr)}"]`);
+  if (!card) return;
+  card.remove();
+  // Remove from _lbData so lightbox navigation stays correct
+  if (window._lbData?.screenshots) {
+    window._lbData.screenshots = window._lbData.screenshots.filter(s => s.file !== fileAttr);
+  }
+  // Update count badge in section header
+  const remaining = document.querySelectorAll('.screenshot-cap-card').length;
+  const countEl = document.querySelector('#sect-screenshots ~ * .text-slate-400, #sect-screenshots .text-slate-400');
+  if (countEl) countEl.textContent = remaining || '';
+}
+
+// Sync caption edited in lightbox back to the grid card + _lbData
+function lbSyncCaption() {
+  const data = window._lbData;
+  if (!data) return;
+  const s = data.screenshots[_lbIdx];
+  if (!s) return;
+  const text = document.getElementById('lb-caption').innerText.trim();
+  // Update in-memory screenshot entry
+  s.caption = text || '[TODO] Подпиши этот скриншот';
+  // Sync to grid card (if visible in DOM)
+  const card = document.querySelector(`.screenshot-cap-card[data-file="${CSS.escape(s.file)}"]`);
+  if (!card) return;
+  const gridCap = card.querySelector('.caption-text');
+  const isTodo = !text;
+  if (gridCap) {
+    gridCap.innerText = isTodo ? '' : text;
+    gridCap.classList.toggle('text-amber-500', isTodo);
+    gridCap.classList.toggle('italic', isTodo);
+    gridCap.classList.toggle('text-slate-800', !isTodo);
+  }
+  card.classList.toggle('border-amber-200', isTodo);
+  card.classList.toggle('border-slate-200', !isTodo);
+}
+
+function closeLightbox(el, event) {
+  if (event && event.target !== el) return;
+  document.getElementById('lightbox').classList.remove('open');
+  document.body.style.overflow = '';
+}
+function closeLightboxBtn() {
+  document.getElementById('lightbox').classList.remove('open');
+  document.body.style.overflow = '';
+}
+document.addEventListener('keydown', e => {
+  const lb = document.getElementById('lightbox');
+  if (!lb.classList.contains('open')) return;
+  if (e.key === 'Escape') { closeLightboxBtn(); return; }
+  // Don't navigate while typing in the caption field
+  if (document.activeElement === document.getElementById('lb-caption')) return;
+  if (e.key === 'ArrowLeft')  { lbNavigate(-1); }
+  if (e.key === 'ArrowRight') { lbNavigate(1); }
+});
+
+// ─── MAIN RENDER ──────────────────────────────────────────────────────────────
+function render() {
+  const route = parseRoute();
+  const data  = getData();
+  const app   = document.getElementById('app');
+
+  if (!app) return;
+
+  if (route.view === 'cards') {
+    app.innerHTML = renderCardsView();
+  } else if (route.view === 'detail') {
+    const comp = data.competitors.find(c => c.id === route.id);
+    if (comp) {
+      app.innerHTML = renderDetailView(comp, data);
+      window._lbData = { compName: comp.name, compId: comp.id, screenshots: comp.screenshots || [] };
+    } else {
+      app.innerHTML = `
+        <div class="max-w-5xl mx-auto px-6 py-16 text-center text-slate-400">
+          <p class="text-lg mb-2">Конкурент не найден: <code>${esc(route.id)}</code></p>
+          <button onclick="navigate('#/cards')" class="text-sm underline hover:text-slate-600">← Все конкуренты</button>
+        </div>`;
+    }
+  } else if (route.view === 'features') {
+    app.innerHTML = renderFeaturesView();
+  } else if (route.view === 'feature') {
+    const feat = getData().features.find(f => f.id === route.id);
+    if (feat) {
+      app.innerHTML = renderFeatureDetailView(feat, getData());
+    } else {
+      app.innerHTML = `
+        <div class="max-w-5xl mx-auto px-6 py-16 text-center text-slate-400">
+          <p class="text-lg mb-2">Параметр не найден: <code>${esc(route.id)}</code></p>
+          <button onclick="navigate('#/features')" class="text-sm underline hover:text-slate-600">← Матрица по фичам</button>
+        </div>`;
+    }
+  }
+
+  updateNav(route.view);
+  window.scrollTo(0, 0);
+}
+
+// ─── BOOTSTRAP ────────────────────────────────────────────────────────────────
+loadState();
+window.addEventListener('hashchange', render);
+document.addEventListener('DOMContentLoaded', () => {
+  if (!window.COMPETITORS_DATA) {
+    document.getElementById('app').innerHTML = `
+      <div class="max-w-xl mx-auto px-6 py-24 text-center">
+        <p class="text-slate-700 font-semibold mb-2">Файл данных не найден</p>
+        <p class="text-sm text-slate-500">
+          Убедись что <code class="bg-slate-100 px-1 rounded">competitors/data/competitors.js</code> существует.<br>
+          Запусти: <code class="bg-slate-100 px-1 rounded">python _parse/generate_json.py</code>
+        </p>
+      </div>`;
+    return;
+  }
+  render();
+});
+</script>
+</body>
+</html>
