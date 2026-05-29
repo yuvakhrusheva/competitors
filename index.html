@@ -254,6 +254,76 @@
 <script>
 'use strict';
 
+// ─── LOGOS ────────────────────────────────────────────────────────────────────
+// Maps competitor id → relative path to logo file
+const LOGOS = {
+  aleks:                  "logos/aleks.svg",
+  amplify_desmos_math:    "logos/amplify_desmos_math.png",
+  century_tech:           "logos/century_tech.png",
+  cerebry:                "logos/cerebry.svg",
+  dreambox:               "logos/dreambox.png",
+  edlight:                "logos/edlight.svg",
+  eedi:                   "logos/eedi.png",
+  evidenceb_adaptiv_math: "logos/evidenceb_adaptiv_math.png",
+  happy_numbers:          "logos/happy_numbers.svg",
+  imagine_im:             "logos/imagine_im.png",
+  ixl:                    "logos/ixl.svg",
+  khanmigo:               "logos/khanmigo.png",
+  knowre:                 "logos/knowre.svg",
+  magma_math:             "logos/magma_math.png",
+  mathia:                 "logos/mathia.svg",
+  matific:                "logos/matific.svg",
+  squirrel_ai:            "logos/squirrel_ai.svg",
+  thinkverse_learnie_ai:  "logos/thinkverse_learnie_ai.svg",
+};
+
+// Companies whose logo is white / light — need a dark card background
+const DARK_BG_LOGOS = new Set(["evidenceb_adaptiv_math"]);
+
+/**
+ * Render the avatar element for a competitor.
+ * Shows the logo if available; falls back to colored initials square.
+ * size: 'sm' = 40×40 (cards), 'lg' = 56×56 (detail header)
+ */
+function renderAvatar(comp, size = 'sm') {
+  const color    = getCardColor(comp.id);
+  const initials = getInitials(comp.name);
+  const logoSrc  = LOGOS[comp.id];
+  const dimCls   = size === 'lg'
+    ? 'w-14 h-14 rounded-xl text-xl'
+    : 'w-10 h-10 rounded-lg text-sm';
+  const darkBg   = DARK_BG_LOGOS.has(comp.id);
+
+  if (logoSrc) {
+    const bgStyle = darkBg ? 'background:#1e293b' : 'background:white';
+    return `
+      <div class="${dimCls} flex-shrink-0 overflow-hidden flex items-center justify-center border border-slate-100 logo-avatar"
+           style="${bgStyle}"
+           data-fallback-color="${color}" data-fallback-text="${esc(initials)}">
+        <img src="${esc(logoSrc)}" alt="${esc(comp.name)}"
+             class="w-full h-full object-contain p-1.5"
+             onerror="avatarFallback(this)" loading="lazy">
+      </div>`;
+  }
+
+  // No logo — show initials
+  return `
+    <div class="${dimCls} flex-shrink-0 flex items-center justify-center text-white font-semibold"
+         style="background-color:${color}" aria-hidden="true">
+      ${esc(initials)}
+    </div>`;
+}
+
+function avatarFallback(img) {
+  const box = img.closest('.logo-avatar');
+  if (!box) return;
+  const color = box.dataset.fallbackColor;
+  const text  = box.dataset.fallbackText;
+  box.style.background = color;
+  box.style.border = 'none';
+  box.innerHTML = `<span class="text-white font-semibold">${text}</span>`;
+}
+
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const CARD_COLORS = [
   '#3b82f6','#8b5cf6','#ec4899','#f59e0b',
@@ -430,8 +500,6 @@ function renderCardsGrid(data) {
 }
 
 function renderCard(comp, data) {
-  const color = getCardColor(comp.id);
-  const initials = getInitials(comp.name);
 
   // Top "yes" features for badge display
   const topFeats = comp.data_tier === 'A'
@@ -456,10 +524,7 @@ function renderCard(comp, data) {
              onkeydown="if(event.key==='Enter'||event.key===' '){navigate('#/competitor/${esc(comp.id)}')}"
              aria-label="${esc(comp.name)}">
       <div class="flex items-start gap-3 mb-3">
-        <div class="w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-semibold flex-shrink-0"
-             style="background-color:${color}" aria-hidden="true">
-          ${esc(initials)}
-        </div>
+        ${renderAvatar(comp, 'sm')}
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2 flex-wrap">
             <span class="font-semibold text-slate-900">${esc(comp.name)}</span>
@@ -493,9 +558,6 @@ function rerenderCards() {
 
 // ─── RENDER: DETAIL VIEW ──────────────────────────────────────────────────────
 function renderDetailView(comp, data) {
-  const color = getCardColor(comp.id);
-  const initials = getInitials(comp.name);
-
   const featuresByCategory = {};
   for (const feat of data.features) {
     if (!featuresByCategory[feat.category]) featuresByCategory[feat.category] = [];
@@ -738,10 +800,7 @@ function renderDetailView(comp, data) {
         </button>
 
         <div class="flex items-start gap-4">
-          <div class="w-14 h-14 rounded-xl flex items-center justify-center text-white text-xl font-semibold flex-shrink-0"
-               style="background-color:${color}" aria-hidden="true">
-            ${esc(initials)}
-          </div>
+          ${renderAvatar(comp, 'lg')}
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-3 flex-wrap">
               <h1 class="text-2xl font-bold text-slate-900">${esc(comp.name)}</h1>
